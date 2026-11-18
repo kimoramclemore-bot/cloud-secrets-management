@@ -1,0 +1,53 @@
+name: Kubernetes Security Experiment
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  experiment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Create Kubernetes cluster
+        uses: helm/kind-action@v1.12.0
+
+      - name: Deploy infrastructure
+        run: |
+          kubectl version
+          kubectl get nodes
+          START=$(date +%s)
+          kubectl apply -f kubernetes-deployment.yaml
+          kubectl apply -f security-rbac.yaml
+          kubectl rollout status deployment/research-app -n secrets-research --timeout=180s
+          echo "Deployment time: $(($(date +%s)-START)) seconds"
+          kubectl get pods -n secrets-research
+
+      - name: Test security controls
+        run: |
+          echo "Authorized access test:"
+          kubectl auth can-i get secret/research-secret \
+            -n secrets-research \
+            --as=system:serviceaccount:secrets-research:authorized-user
+
+          echo "Unauthorized access test:"
+          if kubectl auth can-i get secret/research-secret \
+            -n secrets-research \
+            --as=system:serviceaccount:secrets-research:unauthorized-user; then
+            echo "FAIL: Unauthorized access permitted"
+            exit 1
+          else
+            echo "PASS: Unauthorized access denied"
+          fi
+
+      - name: Verify application credential
+        run: |
+          kubectl exec deployment/research-app \
+            -n secrets-research -- \
+            sh -c 'test "$TEST_PASSWORD" = "synthetic-test-password"'
+          echo "PASS: Application received test credential"
