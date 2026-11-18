@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: secrets-research
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: research-secret
+  namespace: secrets-research
+type: Opaque
+stringData:
+  password: synthetic-test-password
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: research-app
+  namespace: secrets-research
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: research-app
+  template:
+    metadata:
+      labels:
+        app: research-app
+    spec:
+      containers:
+        - name: research-app
+          image: nginx:alpine
+          env:
+            - name: TEST_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: research-secret
+                  key: password
